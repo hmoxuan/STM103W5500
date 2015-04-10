@@ -32,6 +32,9 @@ static void Hardware_Init(void);
 /* 主函数 */
 int main(void)
 {
+//    char value[16]={0};
+//    int32_t t=0;
+  
     /* 底层硬件驱动初始化 */
     Hardware_Init();
     
@@ -54,6 +57,15 @@ int main(void)
         
       /*定时事件循环执行*/
       SoftWareTimeingEventInLoop();
+      
+     
+//      //yeelink_get("19610","34409",value);//×￠òaDèòaDT??3é×??oyeelinkéè±?μ?ID--LED1
+//      yeelink_get("19657","34484",value);//×￠òaDèòaDT??3é×??oyeelinkéè±?μ?ID--LED2
+//      printf("%s\n\r",value);	//char value[16]={0};
+//      printf("\n\r");
+//      for(t=0;t<11;t++){
+//        delay_ms(1000);
+//      } 
     }
 }
 
@@ -71,10 +83,21 @@ static void Hardware_Init(void)
     uart1_init(9600);       /* 串口1初始化：波特率9600 */
     //EXTIX_Init();         /* 外部中断初始化:不需要时一定要注释掉 */
     SPI_Configuration();    /* 配置W5500的SPI1驱动的函数 */
+    Timer_Config();         /*初始化DNS所需要的定时器*/
     WWDG_Init(0X7F,0X5F,WWDG_Prescaler_8);/*计数器值为7f,窗口寄存器为5f,分频数为8*/  
     
     /*底层硬件驱动初始化完成*/
     APP_DebugSerialStrOutput("\r\nHardware Init sucessfully ! \r\n");
+
+    printf("\x0c");printf("\x0c");//超级终端清屏
+    printf("\033[1;40;32m");//设置超级终端背景为黑色，字符为绿色
+    printf("\r\n*******************************************************************************");
+    printf("\r\n************************ Copyright 2015-2050, hatress *************************");
+    printf("\r\n*************************** http://www.embed-net.com **************************");
+    printf("\r\n***************************** All Rights Reserved *****************************");
+    printf("\r\n*******************************************************************************");
+    printf("\r\n");
+
 }
 
 ///* 底层硬件驱动模块测试 */

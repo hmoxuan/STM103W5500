@@ -6,12 +6,19 @@
  * Support:qf.200806@163.com
  */
 #include "NetHandler.h"
+#include "delay.h"//延时函数
 #include "usart.h"//串口
+#include "stm32timer.h"
 #include "spi.h"
 #include "socket.h"//Just include one header for WIZCHIP
 #include "dhcp.h"
+#include "dns.h"
+#include <string.h>
 
-uint8_t memsize[2][8] = { {2,2,2,2,2,2,2,2},{2,2,2,2,2,2,2,2}}; /* WIZCHIP SOCKET Buffer initialize */
+uint8_t memsize[2][8] = {{2,2,2,2,2,2,2,2},{2,2,2,2,2,2,2,2}}; /* WIZCHIP SOCKET Buffer initialize */
+
+uint8_t domain_ip[4]={0};/*域名IP*/
+uint8_t domain_name[]="yeelink.net";/*域名*/
 
 /* Private macro -------------------------------------------------------------*/
 uint8_t gDATABUF[DATA_BUF_SIZE];//获取数据的缓冲区：2048
@@ -31,6 +38,7 @@ static void PhyLinkStatusCheck(void);/* PHY链路状态检查*/
 static void DhcpInitHandler(void);   /*DHCP初始化*/
 static void my_ip_assign(void);      /*动态分配IP*/          
 static void my_ip_conflict(void);    /*IP地址冲突的简单回调函数*/
+void DNS_Analyse(void);/*DNS解析*/
 
 /* IP地址冲突的简单回调函数 */
 static void my_ip_conflict(void)
@@ -56,6 +64,8 @@ static void my_ip_assign(void)
    /* Network initialization */
    network_init();//应用DHCP分配的网络地址进行网络初始化
    printf("DHCP LEASED TIME : %d Sec.\r\n", getDHCPLeasetime());//打印租得的DHCP网络地址时间
+
+   DNS_Analyse();//域名解析
 }
 
 /******************************************************************************
@@ -68,6 +78,7 @@ void network_init(void)
     wiz_NetInfo netinfo;
 
     /*根据gWIZNETINFO结构体设置网络信息*/
+    //DNS服务在gWIZNETINFO变量中必须设置正确，否则可能无法正确分析域名。
     ctlnetwork(CN_SET_NETINFO, (void*)&gWIZNETINFO);
 
     /*获取设置后的网络信息放入netinfo结构体*/
@@ -154,6 +165,10 @@ static void DhcpInitHandler(void)
 void DhcpRunInLoop(void)
 {
   static uint8_t my_dhcp_retry = 0;
+  char value[16]={0};
+  int32_t t=0;
+  
+  
   switch(DHCP_run())
   {
     case DHCP_IP_ASSIGN://DHCP IP分配
@@ -164,6 +179,13 @@ void DhcpRunInLoop(void)
     
     case DHCP_IP_LEASED://TO DO YOUR NETWORK APPs.
         //在租得的DHCP网络地址时间内执行网络App
+        //yeelink_get("19610","34409",value);//×￠òaDèòaDT??3é×??oyeelinkéè±?μ?ID--LED1
+        yeelink_get("19657","34484",value);//×￠òaDèòaDT??3é×??oyeelinkéè±?μ?ID--LED2
+        printf("%s\n\r",value);	//char value[16]={0};
+        printf("\n\r");
+        for(t=0;t<11;t++){
+          delay_ms(1000);
+        } 
         break;
     
     case DHCP_FAILED://动态IP分配失败
@@ -177,6 +199,7 @@ void DhcpRunInLoop(void)
             my_dhcp_retry = 0;
             DHCP_stop();// if restart, recall DHCP_init()
             network_init();// apply the default static network and print out netinfo to serial
+            DNS_Analyse();//域名解析
         }
         break;
         
@@ -184,6 +207,37 @@ void DhcpRunInLoop(void)
         break;
   }  
 }
+
+/*DNS解析*/
+void DNS_Analyse(void)
+{
+    int32_t ret = 0;
+  
+    /*初始化DNS解析程序，并通过调用相关函数获取到machtalk服务器的真实IP地址*/
+    /* DNS client initialization */
+    DNS_init(SOCK_DNS, gDATABUF);
+    Timer_Start();/*启动Timer3*/
+    /* DNS procssing */
+    if ((ret = DNS_run(gWIZNETINFO.dns, domain_name, domain_ip)) > 0){ // try to 1st DNS
+        printf("> 1st DNS Reponsed\r\n");
+    }else if(ret == -1){
+        printf("> MAX_DOMAIN_NAME is too small. Should be redefined it.\r\n");
+        Timer_Stop();/*关闭Timer3*/
+        while(1);
+    }else{
+        printf("> DNS Failed\r\n");
+        Timer_Stop();/*关闭Timer3*/
+        while(1);
+    }
+
+    //DNS解析成功：IP地址存储在domain_ip变量中，后面的socket编程会用到这个变量值。
+    if(ret > 0){
+        printf("> Translated %s to %d.%d.%d.%d\r\n",domain_name,domain_ip[0],domain_ip[1],domain_ip[2],domain_ip[3]);
+    }
+    Timer_Stop();
+}
+
+
 
 /*配置W5500网络*/
 void NetworkInitHandler(void)
@@ -194,6 +248,87 @@ void NetworkInitHandler(void)
     DhcpInitHandler();   /*DHCP初始化*/
 }
 
+/* 循环获取开关量的值，并将获取到的结果提交出来并串口打印输出，当然也可以根据这个值来
+ * 控制LED灯，循环获取间隔时间必须大于10s，这个是yeelink限制的。
+ */
+uint8_t yeelink_get(const char *device_id,const char *sensors_id,char *value)
+{
+    int ret;
+    char* presult;
+    char remote_server[] = "api.yeelink.net";
+    char str_tmp[128] = {0};
+
+    // 请求缓冲区和响应缓冲区
+    static char http_request[DATA_BUF_SIZE] = {0};	//声明为静态变量，防止堆栈溢出
+    static char http_response[DATA_BUF_SIZE] = {0};	//声明为静态变量，防止堆栈溢出
+    sprintf(str_tmp,"/v1.0/device/%s/sensor/%s/datapoints",device_id,sensors_id);
+
+    // 确定 HTTP请求首部
+    // 例如POST /v1.0/device/98d19569e0474e9abf6f075b8b5876b9/1/1/datapoints/add HTTP/1.1\r\n
+    sprintf( http_request , "GET %s HTTP/1.1\r\n",str_tmp);
 
 
+    // 增加属性 例如 Host: api.machtalk.net\r\n
+    sprintf( str_tmp , "Host:%s\r\n" , remote_server);
+    strcat( http_request , str_tmp);
+
+    // 增加密码 例如 APIKey: d8a605daa5f4c8a3ad086151686dce64
+    //sprintf( str_tmp , "U-ApiKey:%s\r\n" , "d8a605daa5f4c8a3ad086151686dce64");//需要替换为自己的APIKey
+    sprintf( str_tmp , "U-ApiKey:%s\r\n" , "e5da11d13d2e5f540ef1a99b3506e081");//APIKey--qinfei
+    strcat( http_request , str_tmp);
+    //
+    strcat( http_request , "Accept: */*\r\n");
+    // 增加表单编码格式 Content-Type:application/x-www-form-urlencoded\r\n
+    strcat( http_request , "Content-Type: application/x-www-form-urlencoded\r\n");
+    strcat( http_request , "Connection: close\r\n");
+    // HTTP首部和HTTP内容 分隔部分
+    strcat( http_request , "\r\n");
+
+    //将数据通过TCP发送出去
+    //新建一个Socket并绑定本地端口5000
+    ret = socket(SOCK_TCPS,Sn_MR_TCP,5000,0x00);
+    if(ret != SOCK_TCPS){
+        printf("%d:Socket Error\r\n",SOCK_TCPS);
+        while(1);
+    }
+    //连接TCP服务器
+    ret = connect(SOCK_TCPS,domain_ip,80);
+    if(ret != SOCK_OK){
+        printf("%d:Socket Connect Error\r\n",SOCK_TCPS);
+        while(1);
+    }	
+    //发送请求
+    ret = send(SOCK_TCPS,(unsigned char *)http_request,strlen(http_request));
+    if(ret != strlen(http_request)){
+        printf("%d:Socket Send Error\r\n",SOCK_TCPS);
+        while(1);
+    }
+
+    // 获得响应
+    ret = recv(SOCK_TCPS,(unsigned char *)http_response,DATA_BUF_SIZE);
+    if(ret <= 0){
+        printf("%d:Socket Get Error\r\n",SOCK_TCPS);
+        while(1);
+    }
+    http_response[ret] = '\0';
+    //判断是否收到HTTP OK
+    presult = strstr( (const char *)http_response , (const char *)"200 OK\r\n");
+    if( presult != NULL ){
+        static char strTmp[DATA_BUF_SIZE]={0};//声明为静态变量，防止堆栈溢出
+        sscanf(http_response,"%*[^{]{%[^}]",strTmp);
+        //提取返回信息
+        char timestamp[64]={0};
+        char timestampTmp[64]={0};
+        char valueTmp[64]={0};
+        sscanf(strTmp,"%[^,],%[^,]",timestampTmp,valueTmp);
+        strncpy(timestamp,strstr(timestampTmp,":")+2,strlen(strstr(timestampTmp,":"))-3);
+        strncpy(value,strstr(valueTmp,":")+1,strlen(strstr(valueTmp,":"))-1);
+    }else{
+        printf("Http Response Error\r\n");
+        printf("%s",http_response);
+    }
+    close(SOCK_TCPS);
+    return 0;
+}
+/*********************************END OF FILE**********************************/
 

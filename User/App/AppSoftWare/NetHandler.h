@@ -11,7 +11,9 @@
 #include "wizchip_conf.h"
 
 /* Private define ------------------------------------------------------------*/
+#define SOCK_TCPS        	0
 #define SOCK_DHCP		0
+#define SOCK_DNS	        1
 #define MY_MAX_DHCP_RETRY	10   /*DHCP重连最大次数*/
 #define DATA_BUF_SIZE           2048 /*获取数据的最大字节数*/
 
@@ -19,5 +21,6 @@
 void network_init(void);      /*网络初始化*/
 void NetworkInitHandler(void);/*配置W5500网络*/
 void DhcpRunInLoop(void);     /*DHCP running*/
+uint8_t yeelink_get(const char *device_id,const char *sensors_id,char *value);
 
 #endif /* __NET_HANDLER_H__ */

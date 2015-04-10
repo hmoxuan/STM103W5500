@@ -23,7 +23,8 @@ DHCP LEASED TIME : 86400 Sec.
 APP_EVENT_GATEWAY_SENDEDV!
 
 
-
+3.stm32demo_0409_2400.rar版
+在网关框架的基础上添加了DHCP、DNS域名解析，并测试Yeelink的LED控制。
 
 
 

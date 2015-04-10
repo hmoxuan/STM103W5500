@@ -11,6 +11,8 @@
 #include "sys.h"
 #include "myportmacro.h"//数据类型宏定义
 
+/* Exported Functions --------------------------------------------------------*/
+
 /*系统时钟*/
 void TIM6_Int_Init(u16 arr,u16 psc);
 
@@ -19,5 +21,10 @@ void Timing_Increase(void);
 
 /*获取系统当前时间*/
 uint32 GetSystemNowtime(void);
+
+void Timer_Config(void);
+void Timer_Start(void);
+void Timer_Stop(void);
+
 
 #endif/*__STM32TIMER_H__*/

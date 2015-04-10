@@ -22,8 +22,10 @@
   */
 
 /* Includes ------------------------------------------------------------------*/
+#include "stm32f10x.h"
 #include "stm32f10x_it.h"
-
+#include "dns.h"
+    
 /** @addtogroup STM32F10x_StdPeriph_Template
   * @{
   */
@@ -32,6 +34,7 @@
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
+volatile uint32_t msTicks; /* counts 100ms timeTicks */
 /* Private function prototypes -----------------------------------------------*/
 /* Private functions ---------------------------------------------------------*/
 
@@ -143,18 +146,32 @@ void SysTick_Handler(void)
 /*  file (startup_stm32f10x_xx.s).                                            */
 /******************************************************************************/
 
+/******************************************************************************/
+/*                 STM32F10x 外设 中断 服务函数                               */
+/*  增加需要的外设中断函数在下面。中断的函数名字都已经在startup_stm32f10x_xx.s*/
+/*  的文件中定义好了，请参照它来写。                                          */
+/******************************************************************************/
 /**
-  * @brief  This function handles PPP interrupt request.
+  * @brief  定时器3中断处理函数，在该函数中将ADC1转换标志置位
   * @param  None
   * @retval None
   */
-/*void PPP_IRQHandler(void)
+void TIM3_IRQHandler(void)
 {
-}*/
+  //检测是否发生溢出更新事件
+  if(TIM_GetITStatus(TIM3, TIM_IT_Update) != RESET)
+  {
+      //清除TIM2的中断待处理位
+      TIM_ClearITPendingBit(TIM3 , TIM_FLAG_Update);
+      msTicks++; /* increment counter necessary in Delay()*/
+      // SHOULD BE Added DNS Timer Handler your 1s tick timer
+      if((msTicks % 10) == 0){
+        DNS_time_handler();
+      }
+  }
+}
 
-/**
-  * @}
-  */ 
+/*********************************END OF FILE**********************************/
 
 
 /******************* (C) COPYRIGHT 2011 STMicroelectronics *****END OF FILE****/
